@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: cv
+    env: python
+    plan: free   # 有料にするなら「starter」や「standard」
+    buildCommand: |
+      apt-get update && apt-get install -y ffmpeg
+      pip install websocket
+    startCommand: python app.py
