@@ -5,5 +5,5 @@ services:
     plan: free   # 有料にするなら「starter」や「standard」
     buildCommand: |
       apt-get update && apt-get install -y ffmpeg
-      pip install -r requiremtns.txt
+      pip install -r requirements.txt
     startCommand: python app.py
