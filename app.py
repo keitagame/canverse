@@ -1,147 +1,204 @@
-#!/usr/bin/env python3
 """
-Canverse - Real-time collaborative drawing platform
-Single-server: HTTP + WebSocket on port 8080
+canverse - リアルタイム協調ホワイトボード
+FastAPI + WebSocket バックエンド
 """
 
-import asyncio
 import json
-import logging
-import uuid
-from typing import Dict
-import http
-import os
-import websockets
-from websockets.server import WebSocketServerProtocol
+import asyncio
+import random
+import string
+from typing import Optional
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import uvicorn
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-logger = logging.getLogger(__name__)
+app = FastAPI(title="canverse")
 
-# ── State ────────────────────────────────────────
-clients: Dict[WebSocketServerProtocol, dict] = {}
-stroke_history: list = []
-MAX_HISTORY = 20000
-
+# ユーザーごとの色パレット（見分けやすい色）
 USER_COLORS = [
-    "#e74c3c", "#3498db", "#2ecc71", "#f39c12",
-    "#9b59b6", "#1abc9c", "#e67e22", "#34495e",
-    "#e91e63", "#00bcd4", "#8bc34a", "#ff5722",
-    "#607d8b", "#795548", "#ff9800", "#009688",
+    "#E63946", "#2196F3", "#4CAF50", "#FF9800", "#9C27B0",
+    "#00BCD4", "#FF5722", "#8BC34A", "#F44336", "#3F51B5",
+    "#009688", "#FFC107", "#673AB7", "#CDDC39", "#E91E63",
 ]
-color_index = 0
 
-HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+def random_id(length=8):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
-def get_html() -> bytes:
-    with open(HTML_PATH, "rb") as f:
-        return f.read()
+class ConnectionManager:
+    def __init__(self):
+        # room_id -> {user_id -> websocket}
+        self.rooms: dict[str, dict[str, WebSocket]] = {}
+        # room_id -> {user_id -> {color, name, cursor}}
+        self.user_info: dict[str, dict[str, dict]] = {}
+        # room_id -> [stroke_events] (最新2000件)
+        self.stroke_history: dict[str, list] = {}
 
-# ── HTTP handler ─────────────────────────────────
-async def http_handler(path, request_headers):
-    if request_headers.get("Upgrade", "").lower() == "websocket":
-        return None  # let WebSocket through
-    body = get_html()
-    headers = [
-        ("Content-Type", "text/html; charset=utf-8"),
-        ("Content-Length", str(len(body))),
-        ("Cache-Control", "no-cache"),
-    ]
-    return http.HTTPStatus.OK, headers, body
+    def assign_color(self, room_id: str) -> str:
+        used = {info["color"] for info in self.user_info.get(room_id, {}).values()}
+        for c in USER_COLORS:
+            if c not in used:
+                return c
+        return random.choice(USER_COLORS)
 
-# ── Broadcast helpers ─────────────────────────────
-async def broadcast(message: dict, exclude=None):
-    if not clients:
-        return
-    data = json.dumps(message)
-    targets = [ws for ws in clients if ws != exclude]
-    if targets:
-        await asyncio.gather(*[ws.send(data) for ws in targets], return_exceptions=True)
+    async def connect(self, room_id: str, user_id: str, ws: WebSocket, name: str):
+        await ws.accept()
+        if room_id not in self.rooms:
+            self.rooms[room_id] = {}
+            self.user_info[room_id] = {}
+            self.stroke_history[room_id] = []
 
-async def broadcast_all(message: dict):
-    if not clients:
-        return
-    data = json.dumps(message)
-    await asyncio.gather(*[ws.send(data) for ws in clients], return_exceptions=True)
+        color = self.assign_color(room_id)
+        self.rooms[room_id][user_id] = ws
+        self.user_info[room_id][user_id] = {
+            "color": color,
+            "name": name,
+            "cursor": None,
+        }
 
-# ── WebSocket handler ────────────────────────────
-async def ws_handler(websocket: WebSocketServerProtocol):
-    global color_index
+        # 新規ユーザーに履歴を送信
+        await ws.send_json({
+            "type": "init",
+            "userId": user_id,
+            "color": color,
+            "history": self.stroke_history[room_id],
+            "users": self._get_users(room_id),
+        })
 
-    user_id    = str(uuid.uuid4())[:8]
-    user_color = USER_COLORS[color_index % len(USER_COLORS)]
-    color_index += 1
+        # 他ユーザーに参加通知
+        await self.broadcast(room_id, {
+            "type": "user_join",
+            "userId": user_id,
+            "name": name,
+            "color": color,
+            "users": self._get_users(room_id),
+        }, exclude=user_id)
 
-    clients[websocket] = {"id": user_id, "color": user_color, "x": 0, "y": 0}
-    logger.info(f"[+] {user_id}  total={len(clients)}")
+    def disconnect(self, room_id: str, user_id: str):
+        if room_id in self.rooms:
+            self.rooms[room_id].pop(user_id, None)
+            self.user_info[room_id].pop(user_id, None)
+            if not self.rooms[room_id]:
+                # 部屋が空になったら履歴を保持（再入室できるように）
+                pass
 
-    try:
-        await websocket.send(json.dumps({
-            "type":      "init",
-            "userId":    user_id,
-            "userColor": user_color,
-            "history":   stroke_history[-3000:],
-            "users": [
-                {"id": v["id"], "color": v["color"], "x": v["x"], "y": v["y"]}
-                for v in clients.values()
-            ],
-        }))
-        await broadcast({"type": "user_joined", "userId": user_id, "color": user_color}, exclude=websocket)
-        await broadcast_all({"type": "user_count", "count": len(clients)})
-
-        async for raw in websocket:
+    async def broadcast(self, room_id: str, data: dict, exclude: Optional[str] = None):
+        if room_id not in self.rooms:
+            return
+        dead = []
+        for uid, ws in self.rooms[room_id].items():
+            if uid == exclude:
+                continue
             try:
-                msg = json.loads(raw)
-                msg_type = msg.get("type")
+                await ws.send_json(data)
+            except Exception:
+                dead.append(uid)
+        for uid in dead:
+            self.disconnect(room_id, uid)
 
-                if msg_type == "draw":
-                    color = str(msg.get("color", "#000000"))
-                    if color == "__eraser__":
-                        color = "#ffffff"
-                    size = max(1, min(60, int(msg.get("size", 4))))
-                    event = {
-                        "type": "draw", "userId": user_id,
-                        "color": color, "size": size,
-                        "x0": float(msg.get("x0", 0)), "y0": float(msg.get("y0", 0)),
-                        "x1": float(msg.get("x1", 0)), "y1": float(msg.get("y1", 0)),
-                    }
-                    stroke_history.append(event)
-                    if len(stroke_history) > MAX_HISTORY:
-                        del stroke_history[:MAX_HISTORY // 10]
-                    await broadcast(event, exclude=websocket)
+    async def send_to(self, room_id: str, user_id: str, data: dict):
+        ws = self.rooms.get(room_id, {}).get(user_id)
+        if ws:
+            try:
+                await ws.send_json(data)
+            except Exception:
+                self.disconnect(room_id, user_id)
 
-                elif msg_type == "cursor":
-                    clients[websocket]["x"] = float(msg.get("x", 0))
-                    clients[websocket]["y"] = float(msg.get("y", 0))
-                    await broadcast({
-                        "type": "cursor", "userId": user_id, "color": user_color,
-                        "x": clients[websocket]["x"], "y": clients[websocket]["y"],
-                    }, exclude=websocket)
+    def _get_users(self, room_id: str) -> list:
+        return [
+            {"userId": uid, **info}
+            for uid, info in self.user_info.get(room_id, {}).items()
+        ]
 
-                # "clear" is intentionally NOT handled — users cannot delete drawings
+    def add_history(self, room_id: str, event: dict):
+        if room_id not in self.stroke_history:
+            self.stroke_history[room_id] = []
+        self.stroke_history[room_id].append(event)
+        # 最新5000件のみ保持
+        if len(self.stroke_history[room_id]) > 5000:
+            self.stroke_history[room_id] = self.stroke_history[room_id][-5000:]
 
-            except (json.JSONDecodeError, ValueError, KeyError) as e:
-                logger.warning(f"Bad message from {user_id}: {e}")
+    def clear_history(self, room_id: str):
+        if room_id in self.stroke_history:
+            self.stroke_history[room_id] = []
 
-    except websockets.exceptions.ConnectionClosed:
-        pass
-    finally:
-        del clients[websocket]
-        logger.info(f"[-] {user_id}  total={len(clients)}")
-        await broadcast({"type": "user_left", "userId": user_id})
-        await broadcast_all({"type": "user_count", "count": len(clients)})
 
-# ── Main ─────────────────────────────────────────
-async def main():
-    host, port = "0.0.0.0", 8080
-    logger.info(f"Canverse  →  http://localhost:{port}")
-    async with websockets.serve(
-        ws_handler, host, port,
-        process_request=http_handler,
-        max_size=2 * 1024 * 1024,
-        ping_interval=20,
-        ping_timeout=40,
-    ):
-        await asyncio.Future()
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/{room_id}/{user_id}")
+async def websocket_endpoint(ws: WebSocket, room_id: str, user_id: str):
+    name = ws.query_params.get("name", f"User-{user_id[:4]}")
+    await manager.connect(room_id, user_id, ws, name)
+    try:
+        while True:
+            data = await ws.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "stroke":
+                # 描画データを履歴に追加してブロードキャスト
+                stroke_event = {
+                    "type": "stroke",
+                    "userId": user_id,
+                    "color": manager.user_info[room_id][user_id]["color"],
+                    "points": data.get("points", []),
+                    "tool": data.get("tool", "pen"),
+                    "size": data.get("size", 15),
+                }
+                manager.add_history(room_id, stroke_event)
+                await manager.broadcast(room_id, stroke_event, exclude=user_id)
+
+            elif msg_type == "cursor":
+                # カーソル位置をブロードキャスト（履歴には残さない）
+                cursor_event = {
+                    "type": "cursor",
+                    "userId": user_id,
+                    "name": name,
+                    "color": manager.user_info[room_id][user_id]["color"],
+                    "x": data.get("x"),
+                    "y": data.get("y"),
+                }
+                await manager.broadcast(room_id, cursor_event, exclude=user_id)
+
+            elif msg_type == "clear":
+                # 全員のキャンバスをクリア
+                manager.clear_history(room_id)
+                await manager.broadcast(room_id, {"type": "clear", "userId": user_id})
+
+            elif msg_type == "undo":
+                # 自分の最後のストロークを消す
+                history = manager.stroke_history.get(room_id, [])
+                # 逆順で自分のストロークを探す
+                for i in range(len(history) - 1, -1, -1):
+                    if history[i].get("userId") == user_id and history[i].get("type") == "stroke":
+                        history.pop(i)
+                        break
+                # 全員に再描画を指示
+                await manager.broadcast(room_id, {
+                    "type": "redraw",
+                    "history": manager.stroke_history.get(room_id, []),
+                })
+                await ws.send_json({
+                    "type": "redraw",
+                    "history": manager.stroke_history.get(room_id, []),
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect(room_id, user_id)
+        await manager.broadcast(room_id, {
+            "type": "user_leave",
+            "userId": user_id,
+            "users": manager._get_users(room_id),
+        })
+    except Exception as e:
+        print(f"Error: {e}")
+        manager.disconnect(room_id, user_id)
+
+
+@app.get("/")
+async def root():
+    return FileResponse("index.html")
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
