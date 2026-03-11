@@ -1,670 +1,821 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Canverse</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>canverse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e0f;
+      --surface: #18181b;
+      --border: #2a2a2e;
+      --text: #e8e8ea;
+      --muted: #6b6b72;
+      --accent: #c8f542;
+    }
 
-  :root {
-    --ui-bg: rgba(255,255,255,0.93);
-    --ui-border: rgba(0,0,0,0.07);
-    --ui-shadow: 0 2px 16px rgba(0,0,0,0.09);
-    --font: 'DM Mono', 'Courier New', monospace;
-  }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  html, body {
-    width: 100%; height: 100%;
-    overflow: hidden;
-    background: #fff;
-    font-family: var(--font);
-    cursor: none;
-  }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+    }
 
-  #canvas {
-    position: fixed;
-    inset: 0;
-    touch-action: none;
-    cursor: none;
-  }
+    /* ── CANVAS ── */
+    #canvas-wrap {
+      position: fixed;
+      inset: 0;
+      background: #f5f0e8;
+      cursor: crosshair;
+    }
 
-  /* ── Toolbar ────────────────────────────────── */
-  #toolbar {
-    position: fixed;
-    top: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    border-radius: 40px;
-    padding: 7px 16px;
-    box-shadow: var(--ui-shadow);
-    backdrop-filter: blur(14px);
-    z-index: 100;
-    user-select: none;
-    white-space: nowrap;
-  }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-  .logo {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.18em;
-    color: #111;
-    text-transform: uppercase;
-    padding-right: 12px;
-    border-right: 1px solid var(--ui-border);
-  }
+    /* ── REMOTE CURSORS ── */
+    .remote-cursor {
+      position: fixed;
+      pointer-events: none;
+      z-index: 100;
+      transform: translate(-4px, -4px);
+      transition: transform 0.05s linear;
+    }
+    .remote-cursor svg { display: block; }
+    .remote-cursor-label {
+      position: absolute;
+      top: 18px;
+      left: 8px;
+      font-size: 10px;
+      font-family: 'DM Mono', monospace;
+      padding: 2px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      color: #fff;
+      font-weight: 500;
+    }
 
-  .sep {
-    width: 1px; height: 18px;
-    background: var(--ui-border);
-    flex-shrink: 0;
-  }
+    /* ── HEADER BAR ── */
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 52px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      z-index: 200;
+    }
 
-  /* Color swatch */
-  #colorWrap {
-    position: relative;
-    width: 26px; height: 26px;
-    border-radius: 50%;
-    overflow: hidden;
-    border: 2px solid rgba(0,0,0,0.14);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  #colorInput {
-    position: absolute;
-    inset: -8px;
-    width: calc(100% + 16px);
-    height: calc(100% + 16px);
-    border: none; padding: 0;
-    cursor: pointer;
-  }
+    #logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: -0.5px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
 
-  #hexInput {
-    width: 74px;
-    font-family: var(--font);
-    font-size: 11px;
-    border: 1px solid var(--ui-border);
-    border-radius: 6px;
-    padding: 4px 7px;
-    background: #f7f7f7;
-    color: #222;
-    outline: none;
-    letter-spacing: 0.04em;
-  }
-  #hexInput:focus { border-color: #aaa; background: #fff; }
+    #room-badge {
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+      user-select: all;
+      transition: border-color 0.15s;
+      letter-spacing: 0.5px;
+    }
+    #room-badge:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* Size slider */
-  #sizeSlider {
-    -webkit-appearance: none;
-    width: 76px; height: 3px;
-    background: #e0e0e0;
-    border-radius: 2px;
-    outline: none;
-    cursor: pointer;
-  }
-  #sizeSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    background: #222;
-    cursor: pointer;
-    transition: transform 0.1s;
-  }
-  #sizeSlider::-webkit-slider-thumb:hover { transform: scale(1.3); }
+    .sep { flex: 1; }
 
-  #sizeLabel {
-    font-size: 11px;
-    color: #999;
-    min-width: 16px;
-    text-align: right;
-  }
+    /* ── USERS ── */
+    #users-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
 
-  /* Buttons */
-  .tbtn {
-    width: 26px; height: 26px;
-    border: 1px solid var(--ui-border);
-    border-radius: 7px;
-    background: transparent;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background 0.1s, border-color 0.1s;
-    color: #555;
-    flex-shrink: 0;
-  }
-  .tbtn:hover { background: #f0f0f0; border-color: #ccc; }
-  .tbtn.active { background: #111; color: #fff; border-color: #111; }
+    .user-dot {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      border: 2px solid var(--bg);
+      transition: transform 0.2s;
+      font-family: 'Syne', sans-serif;
+      cursor: default;
+      position: relative;
+    }
+    .user-dot:hover { transform: scale(1.2); z-index: 1; }
 
-  #modeLabel {
-    font-size: 10px;
-    color: #bbb;
-    letter-spacing: 0.07em;
-    min-width: 36px;
-  }
+    /* ── TOOLBAR ── */
+    #toolbar {
+      position: fixed;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 200;
+    }
 
-  /* ── Status bar ──────────────────────────────── */
-  #status {
-    position: fixed;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    border-radius: 40px;
-    padding: 5px 16px;
-    box-shadow: var(--ui-shadow);
-    backdrop-filter: blur(14px);
-    z-index: 100;
-    font-size: 11px;
-    color: #999;
-    user-select: none;
-    white-space: nowrap;
-  }
-  #status b { color: #444; font-weight: 500; }
+    .tool-btn {
+      width: 36px; height: 36px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+      font-size: 16px;
+    }
+    .tool-btn:hover { background: var(--surface); color: var(--text); }
+    .tool-btn.active { background: var(--accent); color: #0e0e0f; }
 
-  #connDot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: #ddd;
-    transition: background 0.4s;
-    flex-shrink: 0;
-  }
-  #connDot.ok  { background: #2ecc71; }
-  #connDot.err { background: #e74c3c; }
+    .tool-sep {
+      width: 20px;
+      height: 1px;
+      background: var(--border);
+      margin: 2px auto;
+    }
 
-  /* ── Remote cursors ──────────────────────────── */
-  #cursors {
-    position: fixed; inset: 0;
-    pointer-events: none;
-    z-index: 50;
-    overflow: hidden;
-  }
-  .rc {
-    position: absolute;
-    pointer-events: none;
-    transform: translate(-2px, -2px);
-    transition: left 0.04s linear, top 0.04s linear;
-  }
-  .rc-label {
-    position: absolute;
-    top: 17px; left: 9px;
-    font-family: var(--font);
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 4px;
-    color: #fff;
-    white-space: nowrap;
-    opacity: 0.82;
-  }
+    /* size slider */
+    #size-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 0;
+    }
+    #size-val {
+      font-size: 9px;
+      color: var(--muted);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 4px;
+      height: 80px;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      background: var(--border);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
 
-  /* ── Local cursor ────────────────────────────── */
-  #lc {
-    position: fixed;
-    pointer-events: none;
-    z-index: 200;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    transition: width 0.08s, height 0.08s;
-  }
-</style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    /* ── BOTTOM BAR ── */
+    #bottom-bar {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      z-index: 200;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #my-color-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+    }
+
+    #status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #4CAF50;
+      animation: pulse 2s infinite;
+    }
+    #status-dot.disconnected { background: #f44336; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── JOIN MODAL ── */
+    #modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(14,14,15,0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(8px);
+    }
+
+    #modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 36px 32px;
+      width: 360px;
+      max-width: 90vw;
+    }
+
+    #modal h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 28px;
+      color: var(--accent);
+      margin-bottom: 6px;
+      letter-spacing: -1px;
+    }
+    #modal p {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .input-group {
+      margin-bottom: 14px;
+    }
+    .input-group label {
+      display: block;
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .input-group input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-group input:focus { border-color: var(--accent); }
+
+    #join-btn {
+      width: 100%;
+      margin-top: 8px;
+      background: var(--accent);
+      color: #0e0e0f;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: opacity 0.2s;
+    }
+    #join-btn:hover { opacity: 0.88; }
+
+    /* ── NOTIFICATIONS ── */
+    #notifs {
+      position: fixed;
+      bottom: 60px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 300;
+      pointer-events: none;
+    }
+    .notif {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 11px;
+      color: var(--text);
+      opacity: 0;
+      transform: translateX(20px);
+      animation: notif-in 0.3s forwards, notif-out 0.3s 2.7s forwards;
+    }
+    @keyframes notif-in {
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes notif-out {
+      to { opacity: 0; transform: translateX(20px); }
+    }
+
+    /* ── CANVAS AREA OFFSET ── */
+    #canvas-wrap { top: 52px; }
+  </style>
 </head>
 <body>
 
-<div id="toolbar">
-  <span class="logo">Canverse</span>
-
-  <div id="colorWrap" title="色を選択">
-    <input type="color" id="colorInput" value="#111111">
+<!-- JOIN MODAL -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h1>canverse</h1>
+    <p>リアルタイム協調ホワイトボード</p>
+    <div class="input-group">
+      <label>あなたの名前</label>
+      <input id="input-name" type="text" placeholder="名前を入力..." maxlength="20">
+    </div>
+    <div class="input-group">
+      <label>ルームID（空白で新規作成）</label>
+      <input id="input-room" type="text" placeholder="例: my-room-123" maxlength="30">
+    </div>
+    <button id="join-btn">参加する →</button>
   </div>
-  <input type="text" id="hexInput" value="#111111" maxlength="7" spellcheck="false" title="カラーコード">
-
-  <div class="sep"></div>
-
-  <input type="range" id="sizeSlider" min="1" max="60" value="4" title="ペンの太さ">
-  <span id="sizeLabel">4</span>
-
-  <div class="sep"></div>
-
-  <button class="tbtn active" id="penBtn"    title="ペン [P]">✏</button>
-  <button class="tbtn"        id="eraserBtn" title="消しゴム [E]">◻</button>
-  <span id="modeLabel">pen</span>
 </div>
 
-<div id="status">
-  <div id="connDot"></div>
-  <span id="connLabel">接続中...</span>
-  <div class="sep" style="height:11px"></div>
-  <span>👥 <b id="userCount">0</b></span>
-  <div class="sep" style="height:11px"></div>
-  <span>x <b id="cx">0</b>  y <b id="cy">0</b></span>
-  <div class="sep" style="height:11px"></div>
-  <span>zoom <b id="zl">100</b>%</span>
+<!-- HEADER -->
+<div id="header">
+  <div id="logo">canverse</div>
+  <div id="room-badge" title="クリックでコピー">---</div>
+  <div class="sep"></div>
+  <div id="users-row"></div>
 </div>
 
-<div id="cursors"></div>
-<div id="lc" style="width:8px;height:8px;background:#111;"></div>
-<canvas id="canvas"></canvas>
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <button class="tool-btn active" data-tool="pen" title="ペン">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+  </button>
+  <button class="tool-btn" data-tool="marker" title="マーカー">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-4 10-10 3 3L10 16l-4 4-3-3z"/><path d="M14 6l4 4"/></svg>
+  </button>
+  <button class="tool-btn" data-tool="eraser" title="消しゴム">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l9-9 8 8-3 3z"/><path d="M6.26 6.26L3 9.5l5 5"/></svg>
+  </button>
+  <div class="tool-sep"></div>
+  <div id="size-wrap">
+    <span id="size-val">15</span>
+    <input type="range" id="size-slider" min="2" max="60" value="15">
+  </div>
+  <div class="tool-sep"></div>
+  <button class="tool-btn" id="undo-btn" title="元に戻す (Ctrl+Z)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg>
+  </button>
+  <button class="tool-btn" id="clear-btn" title="全て消去">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+  </button>
+</div>
+
+<!-- CANVAS -->
+<div id="canvas-wrap">
+  <canvas id="canvas"></canvas>
+</div>
+
+<!-- REMOTE CURSORS CONTAINER -->
+<div id="cursors-layer"></div>
+
+<!-- BOTTOM BAR -->
+<div id="bottom-bar">
+  <div id="status-dot" class="disconnected"></div>
+  <span id="status-text">切断中</span>
+  <span style="color:var(--border)">|</span>
+  <div id="my-color-dot"></div>
+  <span id="my-name-label">---</span>
+</div>
+
+<!-- NOTIFICATIONS -->
+<div id="notifs"></div>
 
 <script>
-// ════════════════════════════════════════════════
-//  CANVERSE  —  infinite collaborative canvas
-// ════════════════════════════════════════════════
+/* ─── UTILS ─── */
+function randomId(len = 8) {
+  return Math.random().toString(36).slice(2, 2+len);
+}
+function notify(msg) {
+  const el = document.createElement('div');
+  el.className = 'notif';
+  el.textContent = msg;
+  document.getElementById('notifs').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
 
+/* ─── STATE ─── */
+let ws = null;
+let myUserId = null;
+let myColor = '#000';
+let myName = '';
+let roomId = '';
+let currentTool = 'pen';
+let brushSize = 15;
+let drawing = false;
+let lastX = 0, lastY = 0;
+let currentStrokePoints = [];
+let strokeFlushTimer = null;
+const FIXED_ANGLE = Math.PI / 4;
+
+/* ─── CANVAS ─── */
+const wrap = document.getElementById('canvas-wrap');
 const canvas = document.getElementById('canvas');
-const ctx    = canvas.getContext('2d');
+const ctx = canvas.getContext('2d');
 
-// ── Viewport ─────────────────────────────────────
-let vpX = 0, vpY = 0, zoom = 1;
-const MIN_ZOOM = 0.02, MAX_ZOOM = 20;
-
-// ── World bounds (effectively infinite) ──────────
-const WORLD_HALF = 500_000;   // ±500 000 px
-
-// ── Drawing state ─────────────────────────────────
-let isDrawing = false;
-let lastWX = 0, lastWY = 0;
-let penColor = '#111111';
-let penSize  = 4;
-let mode = 'pen';
-let myId = null;
-
-// ── WebSocket ─────────────────────────────────────
-let ws = null, wsReady = false;
-const pending = [];
-
-// ── Strokes store ─────────────────────────────────
-const strokes = [];
-
-// ── Remote cursors ────────────────────────────────
-const rc = {};
-
-// ═══════════════════════
-//  Resize
-// ═══════════════════════
-function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  redraw();
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  redrawAll();
 }
-window.addEventListener('resize', resize);
+window.addEventListener('resize', resizeCanvas);
 
-// ═══════════════════════
-//  Coords
-// ═══════════════════════
-function s2w(sx, sy) {
-  return {
-    x: (sx - canvas.width  / 2) / zoom + vpX,
-    y: (sy - canvas.height / 2) / zoom + vpY,
-  };
-}
-function w2s(wx, wy) {
-  return {
-    x: (wx - vpX) * zoom + canvas.width  / 2,
-    y: (wy - vpY) * zoom + canvas.height / 2,
-  };
-}
+/* ─── DRAWING HISTORY (local mirror) ─── */
+let strokeHistory = [];
 
-// ═══════════════════════
-//  Grid
-// ═══════════════════════
-function drawGrid() {
-  // Only show grid when zoomed in enough
-  if (zoom < 0.15) return;
-
-  // Choose a grid step that stays between ~40–120 px on screen
-  const rawStep = 100 / zoom;
-  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const norm = rawStep / mag;
-  let step;
-  if (norm < 2)       step = mag;
-  else if (norm < 5)  step = 2 * mag;
-  else                step = 5 * mag;
-
-  const screenStep = step * zoom;
-
-  // World coords of visible corners
-  const tl = s2w(0, 0);
-  const br = s2w(canvas.width, canvas.height);
-
-  const x0 = Math.floor(tl.x / step) * step;
-  const y0 = Math.floor(tl.y / step) * step;
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(0,0,0,0.045)';
-  ctx.lineWidth   = 1;
-  ctx.setLineDash([]);
-
-  for (let wx = x0; wx <= br.x + step; wx += step) {
-    const sx = Math.round((wx - vpX) * zoom + canvas.width / 2) + 0.5;
-    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, canvas.height); ctx.stroke();
+function redrawAll(history) {
+  if (history) strokeHistory = history;
+  const dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+  for (const s of strokeHistory) {
+    renderStroke(s);
   }
-  for (let wy = y0; wy <= br.y + step; wy += step) {
-    const sy = Math.round((wy - vpY) * zoom + canvas.height / 2) + 0.5;
-    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(canvas.width, sy); ctx.stroke();
+}
+
+function renderStroke(s) {
+  const pts = s.points;
+  if (!pts || pts.length < 2) return;
+  const color = s.color || '#000';
+  const size = s.size || 15;
+  const tool = s.tool || 'pen';
+
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
   }
 
-  // Origin cross
-  const o = w2s(0, 0);
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(o.x - 10, o.y); ctx.lineTo(o.x + 10, o.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(o.x, o.y - 10); ctx.lineTo(o.x, o.y + 10); ctx.stroke();
-
-  ctx.restore();
-}
-
-// ═══════════════════════
-//  Redraw full scene
-// ═══════════════════════
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  drawGrid();
-
-  ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.scale(zoom, zoom);
-  ctx.translate(-vpX, -vpY);
-
-  ctx.lineCap  = 'round';
-  ctx.lineJoin = 'round';
-
-  for (const s of strokes) {
+  if (tool === 'marker') {
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size * 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth   = s.size;
-    ctx.moveTo(s.x0, s.y0);
-    ctx.lineTo(s.x1, s.y1);
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
     ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else {
+    // pen / eraser: rect brush stamped along path
+    for (let i = 1; i < pts.length; i++) {
+      const x1 = pts[i-1].x, y1 = pts[i-1].y;
+      const x2 = pts[i].x, y2 = pts[i].y;
+      drawRectSegment(x1, y1, x2, y2, color, size, tool === 'eraser');
+    }
   }
-
-  ctx.restore();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
 }
 
-// ═══════════════════════
-//  Incremental draw
-// ═══════════════════════
-function paintStroke(s) {
-  ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.scale(zoom, zoom);
-  ctx.translate(-vpX, -vpY);
-  ctx.beginPath();
-  ctx.strokeStyle = s.color;
-  ctx.lineWidth   = s.size;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.moveTo(s.x0, s.y0);
-  ctx.lineTo(s.x1, s.y1);
-  ctx.stroke();
-  ctx.restore();
-}
+function drawRectSegment(x1, y1, x2, y2, color, size, eraser) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(dist / 2));
+  const w = size, h = Math.max(2, size / 3);
 
-function addStroke(s) {
-  strokes.push(s);
-  paintStroke(s);
-}
-
-// ═══════════════════════
-//  Remote cursors
-// ═══════════════════════
-function upsertRC(id, color, wx, wy) {
-  if (id === myId) return;
-  let e = rc[id];
-  if (!e) {
-    const el = document.createElement('div');
-    el.className = 'rc';
-    el.innerHTML =
-      `<svg width="16" height="18" viewBox="0 0 16 18">
-         <path d="M2 2 L2 14 L5.5 10.5 L8.5 16.5 L10.5 15.5 L7.5 9.5 L13 9.5 Z"
-               fill="${color}" stroke="#fff" stroke-width="1.2"/>
-       </svg>
-       <div class="rc-label" style="background:${color}">${id}</div>`;
-    document.getElementById('cursors').appendChild(el);
-    e = rc[id] = { el, wx: 0, wy: 0 };
-  }
-  e.wx = wx; e.wy = wy;
-  moveRC(e);
-}
-
-function moveRC(e) {
-  const s = w2s(e.wx, e.wy);
-  e.el.style.left = s.x + 'px';
-  e.el.style.top  = s.y + 'px';
-}
-
-function removeRC(id) {
-  if (rc[id]) { rc[id].el.remove(); delete rc[id]; }
-}
-
-function refreshAllRC() {
-  for (const e of Object.values(rc)) moveRC(e);
-}
-
-// ═══════════════════════
-//  WebSocket
-// ═══════════════════════
-const WS_URL = `ws://${location.host}`;
-
-function connect() {
-  setConn('connecting');
-  ws = new WebSocket(WS_URL);
-  ws.onopen  = () => { wsReady = true;  setConn('ok'); pending.forEach(m => ws.send(JSON.stringify(m))); pending.length = 0; };
-  ws.onclose = () => { wsReady = false; setConn('err'); setTimeout(connect, 2500); };
-  ws.onerror = () => { wsReady = false; setConn('err'); };
-  ws.onmessage = e => handle(JSON.parse(e.data));
-}
-
-function send(obj) {
-  if (wsReady && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-  else if (obj.type === 'draw') pending.push(obj);
-}
-
-function handle(msg) {
-  switch (msg.type) {
-    case 'init':
-      myId = msg.userId;
-      strokes.length = 0;
-      for (const s of (msg.history || [])) strokes.push(s);
-      redraw();
-      for (const u of (msg.users || [])) upsertRC(u.id, u.color, u.x, u.y);
-      break;
-    case 'draw':
-      addStroke({ color: msg.color, size: msg.size, x0: msg.x0, y0: msg.y0, x1: msg.x1, y1: msg.y1 });
-      break;
-    case 'cursor':
-      upsertRC(msg.userId, msg.color, msg.x, msg.y);
-      break;
-    case 'user_left':
-      removeRC(msg.userId);
-      break;
-    case 'user_count':
-      document.getElementById('userCount').textContent = msg.count;
-      break;
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    const x = x1 + dx * t;
+    const y = y1 + dy * t;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(FIXED_ANGLE);
+    if (eraser) {
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+    } else {
+      ctx.fillStyle = color;
+    }
+    ctx.fillRect(-w/2, -h/2, w, h);
+    ctx.restore();
   }
 }
 
-function setConn(state) {
-  const dot = document.getElementById('connDot');
-  const lbl = document.getElementById('connLabel');
-  dot.className = state === 'ok' ? 'ok' : state === 'err' ? 'err' : '';
-  lbl.textContent = state === 'ok' ? '接続済み' : state === 'err' ? '再接続中...' : '接続中...';
+/* ─── LOCAL DRAWING ─── */
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches) {
+    return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+  }
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
 }
 
-// ═══════════════════════
-//  Pointer — draw
-// ═══════════════════════
-let lastCursorT = 0;
-
-function ptrWorld(e) {
-  const r = canvas.getBoundingClientRect();
-  return s2w(e.clientX - r.left, e.clientY - r.top);
+function startDraw(e) {
+  drawing = true;
+  const {x, y} = getPos(e);
+  lastX = x; lastY = y;
+  currentStrokePoints = [{x, y}];
 }
 
-function maybeCursor(wx, wy) {
-  const now = Date.now();
-  if (now - lastCursorT < 30) return;
-  lastCursorT = now;
-  send({ type: 'cursor', x: wx, y: wy });
+function moveDraw(e) {
+  // send cursor
+  const {x, y} = getPos(e);
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'cursor', x, y }));
+  }
+  if (!drawing) return;
+
+  // local preview
+  const tool = currentTool;
+  const size = brushSize;
+
+  if (tool === 'marker') {
+    ctx.globalAlpha = 0.35;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = myColor;
+    ctx.lineWidth = size * 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else {
+    if (tool === 'eraser') ctx.globalCompositeOperation = 'destination-out';
+    drawRectSegment(lastX, lastY, x, y, myColor, size, tool === 'eraser');
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  currentStrokePoints.push({x, y});
+  lastX = x; lastY = y;
+
+  // flush stroke points periodically
+  clearTimeout(strokeFlushTimer);
+  if (currentStrokePoints.length >= 8) flushStroke(false);
+  else strokeFlushTimer = setTimeout(() => flushStroke(false), 30);
 }
 
-canvas.addEventListener('pointerdown', e => {
-  if (isPanning || e.button !== 0) return;
-  canvas.setPointerCapture(e.pointerId);
-  isDrawing = true;
-  const w = ptrWorld(e); lastWX = w.x; lastWY = w.y;
+function endDraw() {
+  if (!drawing) return;
+  drawing = false;
+  flushStroke(true);
+}
+
+function flushStroke(final) {
+  if (currentStrokePoints.length < 2) {
+    if (final) currentStrokePoints = [];
+    return;
+  }
+  const pts = currentStrokePoints.slice();
+  if (final) currentStrokePoints = [];
+  else currentStrokePoints = [pts[pts.length - 1]];
+
+  if (ws && ws.readyState === 1) {
+    const msg = {
+      type: 'stroke',
+      points: pts,
+      tool: currentTool,
+      size: brushSize,
+    };
+    ws.send(JSON.stringify(msg));
+    // add to local history
+    strokeHistory.push({
+      type: 'stroke',
+      userId: myUserId,
+      color: myColor,
+      points: pts,
+      tool: currentTool,
+      size: brushSize,
+    });
+  }
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mousemove', moveDraw);
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e); }, { passive: false });
+canvas.addEventListener('touchmove', e => { e.preventDefault(); moveDraw(e); }, { passive: false });
+canvas.addEventListener('touchend', e => { e.preventDefault(); endDraw(); });
+
+/* ─── REMOTE CURSORS ─── */
+const cursorLayer = document.getElementById('cursors-layer');
+const remoteCursors = {};
+
+function updateCursor(userId, x, y, name, color) {
+  let el = remoteCursors[userId];
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'remote-cursor';
+    el.innerHTML = `
+      <svg width="16" height="20" viewBox="0 0 16 20" fill="${color}">
+        <path d="M0 0 L0 16 L4 12 L7 18 L9 17 L6 11 L11 11 Z" fill="${color}" stroke="#fff" stroke-width="1"/>
+      </svg>
+      <div class="remote-cursor-label" style="background:${color}">${name}</div>
+    `;
+    cursorLayer.appendChild(el);
+    remoteCursors[userId] = el;
+  }
+  // offset for header
+  el.style.left = x + 'px';
+  el.style.top = (y + 52) + 'px';
+}
+
+function removeCursor(userId) {
+  if (remoteCursors[userId]) {
+    remoteCursors[userId].remove();
+    delete remoteCursors[userId];
+  }
+}
+
+/* ─── USERS UI ─── */
+function updateUsersUI(users) {
+  const row = document.getElementById('users-row');
+  row.innerHTML = '';
+  for (const u of users) {
+    const dot = document.createElement('div');
+    dot.className = 'user-dot';
+    dot.style.background = u.color;
+    dot.title = u.name;
+    dot.textContent = u.name.slice(0,1).toUpperCase();
+    row.appendChild(dot);
+  }
+}
+
+/* ─── WEBSOCKET ─── */
+function connect(name, room) {
+  myName = name;
+  roomId = room;
+  myUserId = randomId();
+  const host = location.hostname;
+  const port = location.port || 8000;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${host}:${port}/ws/${roomId}/${myUserId}?name=${encodeURIComponent(name)}`;
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    setStatus(true);
+    document.getElementById('room-badge').textContent = roomId;
+  };
+
+  ws.onmessage = (ev) => {
+    const data = JSON.parse(ev.data);
+    switch (data.type) {
+      case 'init':
+        myColor = data.color;
+        document.getElementById('my-color-dot').style.background = myColor;
+        document.getElementById('my-name-label').textContent = myName;
+        redrawAll(data.history || []);
+        updateUsersUI(data.users || []);
+        resizeCanvas();
+        break;
+
+      case 'stroke': {
+        strokeHistory.push(data);
+        renderStroke(data);
+        break;
+      }
+
+      case 'cursor':
+        updateCursor(data.userId, data.x, data.y, data.name, data.color);
+        break;
+
+      case 'clear':
+        strokeHistory = [];
+        const dpr = window.devicePixelRatio || 1;
+        ctx.clearRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+        notify('キャンバスがクリアされました');
+        break;
+
+      case 'redraw':
+        redrawAll(data.history || []);
+        break;
+
+      case 'user_join':
+        updateUsersUI(data.users || []);
+        notify(`${data.name} が参加しました`);
+        break;
+
+      case 'user_leave':
+        updateUsersUI(data.users || []);
+        removeCursor(data.userId);
+        break;
+    }
+  };
+
+  ws.onclose = () => {
+    setStatus(false);
+    setTimeout(() => connect(myName, roomId), 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function setStatus(ok) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  if (ok) {
+    dot.className = 'status-dot';
+    txt.textContent = '接続中';
+    dot.style.background = '#4CAF50';
+    dot.style.animation = 'pulse 2s infinite';
+  } else {
+    dot.style.background = '#f44336';
+    dot.style.animation = 'none';
+    txt.textContent = '再接続中...';
+  }
+}
+
+/* ─── TOOLBAR ─── */
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTool = btn.dataset.tool;
+    canvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
+  });
 });
 
-canvas.addEventListener('pointermove', e => {
-  const w = ptrWorld(e);
-  const lc = document.getElementById('lc');
-  lc.style.left = e.clientX + 'px';
-  lc.style.top  = e.clientY + 'px';
-  document.getElementById('cx').textContent = Math.round(w.x);
-  document.getElementById('cy').textContent = Math.round(w.y);
-  maybeCursor(w.x, w.y);
-  if (!isDrawing) return;
-
-  const color = mode === 'eraser' ? '#ffffff' : penColor;
-  const size  = mode === 'eraser' ? penSize * 4 : penSize;
-  const s = { color, size, x0: lastWX, y0: lastWY, x1: w.x, y1: w.y };
-  addStroke(s);
-  send({ type: 'draw', color, size, x0: lastWX, y0: lastWY, x1: w.x, y1: w.y });
-  lastWX = w.x; lastWY = w.y;
+document.getElementById('size-slider').addEventListener('input', e => {
+  brushSize = +e.target.value;
+  document.getElementById('size-val').textContent = brushSize;
 });
 
-canvas.addEventListener('pointerup',    () => { isDrawing = false; });
-canvas.addEventListener('pointerleave', () => { isDrawing = false; });
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (!confirm('キャンバスを全て消しますか？')) return;
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'clear' }));
+  strokeHistory = [];
+  const dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, canvas.width/dpr, canvas.height/dpr);
+});
 
-// ═══════════════════════
-//  Pan
-// ═══════════════════════
-let isPanning = false, panSX = 0, panSY = 0, panVX = 0, panVY = 0, spaceDown = false;
+document.getElementById('undo-btn').addEventListener('click', undo);
+
+function undo() {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'undo' }));
+}
 
 document.addEventListener('keydown', e => {
-  if (e.code === 'Space' && !e.repeat) { spaceDown = true; canvas.style.cursor = 'grab'; }
-  if (e.code === 'KeyP') setMode('pen');
-  if (e.code === 'KeyE') setMode('eraser');
-});
-document.addEventListener('keyup', e => {
-  if (e.code === 'Space') { spaceDown = false; canvas.style.cursor = 'none'; isPanning = false; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
 });
 
-canvas.addEventListener('pointerdown', e => {
-  if (e.button === 1 || (e.button === 0 && spaceDown)) {
-    isPanning = true; isDrawing = false;
-    panSX = e.clientX; panSY = e.clientY;
-    panVX = vpX; panVY = vpY;
-    canvas.style.cursor = 'grabbing';
-    e.preventDefault();
-  }
-});
-canvas.addEventListener('pointermove', e => {
-  if (!isPanning) return;
-  vpX = panVX - (e.clientX - panSX) / zoom;
-  vpY = panVY - (e.clientY - panSY) / zoom;
-  redraw(); refreshAllRC();
-});
-canvas.addEventListener('pointerup', () => {
-  if (isPanning) { isPanning = false; canvas.style.cursor = spaceDown ? 'grab' : 'none'; }
+/* ─── ROOM BADGE: copy ─── */
+document.getElementById('room-badge').addEventListener('click', () => {
+  const url = `${location.origin}?room=${roomId}`;
+  navigator.clipboard.writeText(url).then(() => notify('URLをコピーしました！'));
 });
 
-// ═══════════════════════
-//  Zoom
-// ═══════════════════════
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  const r  = canvas.getBoundingClientRect();
-  const sx = e.clientX - r.left, sy = e.clientY - r.top;
-  const wB = s2w(sx, sy);
-  const f  = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * f));
-  const wA = s2w(sx, sy);
-  vpX += wB.x - wA.x;
-  vpY += wB.y - wA.y;
-  document.getElementById('zl').textContent = Math.round(zoom * 100);
-  redraw(); refreshAllRC(); updateLC();
-}, { passive: false });
+/* ─── JOIN MODAL ─── */
+const modal = document.getElementById('modal-overlay');
 
-// ═══════════════════════
-//  Toolbar
-// ═══════════════════════
-const colorInput = document.getElementById('colorInput');
-const hexInput   = document.getElementById('hexInput');
-const sizeSlider = document.getElementById('sizeSlider');
-const sizeLabel  = document.getElementById('sizeLabel');
-const penBtn     = document.getElementById('penBtn');
-const eraserBtn  = document.getElementById('eraserBtn');
-
-colorInput.addEventListener('input', () => {
-  penColor = colorInput.value;
-  hexInput.value = penColor;
-  updateLC();
-});
-
-hexInput.addEventListener('input', () => {
-  const v = hexInput.value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) { penColor = v; colorInput.value = v; updateLC(); }
-});
-hexInput.addEventListener('keydown', e => e.stopPropagation());
-
-sizeSlider.addEventListener('input', () => {
-  penSize = parseInt(sizeSlider.value);
-  sizeLabel.textContent = penSize;
-  updateLC();
-});
-
-penBtn.addEventListener('click',    () => setMode('pen'));
-eraserBtn.addEventListener('click', () => setMode('eraser'));
-
-function setMode(m) {
-  mode = m;
-  penBtn.classList.toggle('active',    m === 'pen');
-  eraserBtn.classList.toggle('active', m === 'eraser');
-  document.getElementById('modeLabel').textContent = m;
-  updateLC();
+function getUrlParam(k) {
+  return new URLSearchParams(location.search).get(k);
 }
 
-function updateLC() {
-  const lc = document.getElementById('lc');
-  const sz = mode === 'eraser' ? penSize * 4 : penSize;
-  const s  = Math.max(6, sz * zoom);
-  lc.style.width   = s + 'px';
-  lc.style.height  = s + 'px';
-  if (mode === 'eraser') {
-    lc.style.background = 'rgba(180,180,180,0.18)';
-    lc.style.border     = '1.5px solid #bbb';
-  } else {
-    lc.style.background = penColor;
-    lc.style.border     = 'none';
-  }
-}
-
-document.addEventListener('mousemove', e => {
-  const lc = document.getElementById('lc');
-  lc.style.left = e.clientX + 'px';
-  lc.style.top  = e.clientY + 'px';
+document.getElementById('join-btn').addEventListener('click', () => {
+  const name = document.getElementById('input-name').value.trim() || `User-${randomId(4)}`;
+  const room = document.getElementById('input-room').value.trim() || randomId(6);
+  modal.style.display = 'none';
+  connect(name, room);
+  history.replaceState({}, '', `?room=${room}`);
 });
 
-// ═══════════════════════
-//  Boot
-// ═══════════════════════
-resize();
-updateLC();
-connect();
-document.getElementById('zl').textContent = Math.round(zoom * 100);
+document.getElementById('input-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+document.getElementById('input-room').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+
+// Pre-fill room from URL
+const urlRoom = getUrlParam('room');
+if (urlRoom) document.getElementById('input-room').value = urlRoom;
+document.getElementById('input-name').focus();
 </script>
 </body>
 </html>
